@@ -16,7 +16,7 @@ end
 
 local function editable_picker(opts)
 	local function open(default_text, state)
-		state = vim.tbl_extend('force', { cwd = vim.fn.getcwd(), cmd_args = {} }, state or {})
+		state = vim.tbl_extend('force', { cwd = opts.picker_opts.cwd or vim.fn.getcwd(), cmd_args = {} }, state or {})
 		local picker_opts = vim.tbl_extend('force', opts.picker_opts or {}, {
 			cwd = state.cwd,
 			default_text = default_text,
@@ -25,20 +25,22 @@ local function editable_picker(opts)
 		local attach_mappings = picker_opts.attach_mappings
 
 		picker_opts.attach_mappings = function(prompt_bufnr, map)
-			map('i', '<C-a>', function()
-				local prompt = action_state.get_current_picker(prompt_bufnr):_get_prompt()
-				actions.close(prompt_bufnr)
-				vim.schedule(function()
-					vim.ui.input({
-						prompt = opts.cmd_args_prompt or 'cmd args: ',
-						default = table.concat(state.cmd_args, ' '),
-					}, function(input)
-						open(prompt, input == nil and state or vim.tbl_extend('force', {}, state, {
-							cmd_args = opts.parse_cmd_args(input),
-						}))
+			if opts.parse_cmd_args then
+				map('i', '<C-a>', function()
+					local prompt = action_state.get_current_picker(prompt_bufnr):_get_prompt()
+					actions.close(prompt_bufnr)
+					vim.schedule(function()
+						vim.ui.input({
+							prompt = opts.cmd_args_prompt or 'cmd args: ',
+							default = table.concat(state.cmd_args, ' '),
+						}, function(input)
+							open(prompt, input == nil and state or vim.tbl_extend('force', {}, state, {
+								cmd_args = opts.parse_cmd_args(input),
+							}))
+						end)
 					end)
 				end)
-			end)
+			end
 
 			map('i', '<C-s>', function()
 				local prompt = action_state.get_current_picker(prompt_bufnr):_get_prompt()
@@ -75,9 +77,6 @@ local function find_files(opts)
 	opts = opts or {}
 	editable_picker({
 		picker_opts = opts,
-		parse_cmd_args = function(input)
-			return vim.split(input or '', '%s+', { trimempty = true })
-		end,
 		prompt_title = function(state)
 			return opts.prompt_title or 'Find Files (' .. root_label(state.cwd) .. ')'
 		end,
@@ -87,14 +86,16 @@ local function find_files(opts)
 	})
 end
 
-local function live_grep()
+local function live_grep(opts)
+	opts = opts or {}
 	editable_picker({
+		picker_opts = opts,
 		cmd_args_prompt = 'rg flags: ',
 		parse_cmd_args = function(input)
 			return input == '' and {} or prompt_parser.parse(input, false)
 		end,
 		prompt_title = function(state)
-			return 'Live Grep (' .. root_label(state.cwd) .. ') [' .. table.concat(state.cmd_args, ' ') .. ']'
+			return opts.prompt_title or 'Live Grep (' .. root_label(state.cwd) .. ') [' .. table.concat(state.cmd_args, ' ') .. ']'
 		end,
 		open = function(state, picker_opts)
 			picker_opts.entry_maker = make_entry.gen_from_vimgrep(picker_opts)
