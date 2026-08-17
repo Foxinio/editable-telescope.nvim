@@ -41,7 +41,7 @@ require('telescope').extensions.editable.find_files()
 require('telescope').extensions.editable.live_grep()
 ```
 
-While a picker is open in insert mode:
+While a picker is open in insert or normal mode:
 
 - `<C-s>` changes the search root.
 - `<C-a>` edits `rg` arguments in `live_grep`.

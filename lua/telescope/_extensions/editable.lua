@@ -25,7 +25,7 @@ local function editable_picker(opts)
 
 		picker_opts.attach_mappings = function(prompt_bufnr, map)
 			if opts.parse_cmd_args then
-				map('i', '<C-a>', function()
+				map({ 'i', 'n' }, '<C-a>', function()
 					local prompt = action_state.get_current_picker(prompt_bufnr):_get_prompt()
 					actions.close(prompt_bufnr)
 					vim.schedule(function()
@@ -41,7 +41,7 @@ local function editable_picker(opts)
 				end)
 			end
 
-			map('i', '<C-s>', function()
+			map({ 'i', 'n' }, '<C-s>', function()
 				local prompt = action_state.get_current_picker(prompt_bufnr):_get_prompt()
 				actions.close(prompt_bufnr)
 				vim.schedule(function()
