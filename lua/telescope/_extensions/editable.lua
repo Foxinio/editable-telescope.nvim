@@ -5,7 +5,6 @@ local conf = require('telescope.config').values
 local finders = require('telescope.finders')
 local make_entry = require('telescope.make_entry')
 local pickers = require('telescope.pickers')
-local prompt_parser = require('telescope-live-grep-args.prompt_parser')
 local sorters = require('telescope.sorters')
 local telescope = require('telescope')
 
@@ -78,7 +77,8 @@ local function find_files(opts)
 	editable_picker({
 		picker_opts = opts,
 		prompt_title = function(state)
-			return opts.prompt_title or 'Find Files (' .. root_label(state.cwd) .. ')'
+			local default_prompt_title = 'Find Files (' .. root_label(state.cwd) .. ')'
+			return opts.prompt_title or default_prompt_title
 		end,
 		open = function(_, picker_opts)
 			builtin.find_files(picker_opts)
@@ -92,10 +92,11 @@ local function live_grep(opts)
 		picker_opts = opts,
 		cmd_args_prompt = 'rg flags: ',
 		parse_cmd_args = function(input)
-			return input == '' and {} or prompt_parser.parse(input, false)
+			return vim.split(input or '', '%s+', { trimempty = true })
 		end,
 		prompt_title = function(state)
-			return opts.prompt_title or 'Live Grep (' .. root_label(state.cwd) .. ') [' .. table.concat(state.cmd_args, ' ') .. ']'
+			local default_prompt_title = 'Live Grep (' .. root_label(state.cwd) .. ') [' .. table.concat(state.cmd_args, ' ') .. ']'
+			return opts.prompt_title or default_prompt_title
 		end,
 		open = function(state, picker_opts)
 			picker_opts.entry_maker = make_entry.gen_from_vimgrep(picker_opts)

@@ -9,7 +9,6 @@ open.
 
 - Neovim
 - [telescope.nvim](https://github.com/nvim-telescope/telescope.nvim)
-- [telescope-live-grep-args.nvim](https://github.com/nvim-telescope/telescope-live-grep-args.nvim)
 - [ripgrep](https://github.com/BurntSushi/ripgrep) for `live_grep`
 
 ## Installation
@@ -21,18 +20,11 @@ With lazy.nvim:
   'foxinio/editable-telescope.nvim',
   dependencies = {
     'nvim-telescope/telescope.nvim',
-    'nvim-telescope/telescope-live-grep-args.nvim',
   },
   config = function()
     require('telescope').load_extension('editable')
   end,
 }
-```
-
-For a local checkout, replace the repository string with:
-
-```lua
-dir = '/path/to/editable-telescope.nvim'
 ```
 
 ## Usage
