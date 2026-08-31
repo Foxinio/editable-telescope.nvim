@@ -1,5 +1,6 @@
 local actions = require('telescope.actions')
 local action_state = require('telescope.actions.state')
+local args = require('editable-telescope.args')
 local builtin = require('telescope.builtin')
 local conf = require('telescope.config').values
 local finders = require('telescope.finders')
@@ -91,9 +92,7 @@ local function live_grep(opts)
 	editable_picker({
 		picker_opts = opts,
 		cmd_args_prompt = 'rg flags: ',
-		parse_cmd_args = function(input)
-			return vim.split(input or '', '%s+', { trimempty = true })
-		end,
+		parse_cmd_args = args.split,
 		prompt_title = function(state)
 			local default_prompt_title = 'Live Grep (' .. root_label(state.cwd) .. ') [' .. table.concat(state.cmd_args, ' ') .. ']'
 			return opts.prompt_title or default_prompt_title
