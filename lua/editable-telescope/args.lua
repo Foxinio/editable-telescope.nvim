@@ -42,4 +42,15 @@ function M.split(input)
 	return args
 end
 
+function M.build(opts, edited, defaults)
+	local additional = opts.additional_args
+	if type(additional) == 'function' then
+		additional = additional(opts)
+	elseif type(additional) ~= 'table' then
+		additional = {}
+	end
+
+	return vim.list_extend(vim.list_extend(vim.deepcopy(opts.vimgrep_arguments or defaults), additional), edited)
+end
+
 return M

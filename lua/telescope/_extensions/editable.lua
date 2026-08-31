@@ -99,7 +99,7 @@ local function live_grep(opts)
 		end,
 		open = function(state, picker_opts)
 			picker_opts.entry_maker = make_entry.gen_from_vimgrep(picker_opts)
-			local args = vim.list_extend(vim.deepcopy(conf.vimgrep_arguments), state.cmd_args)
+			local command = args.build(picker_opts, state.cmd_args, conf.vimgrep_arguments)
 
 			pickers.new(picker_opts, {
 				finder = finders.new_job(function(prompt)
@@ -107,7 +107,7 @@ local function live_grep(opts)
 						return nil
 					end
 
-					return vim.list_extend(vim.deepcopy(args), { '--', prompt })
+					return vim.list_extend(vim.deepcopy(command), { '--', prompt })
 				end, picker_opts.entry_maker, picker_opts.max_results, picker_opts.cwd),
 				previewer = conf.grep_previewer(picker_opts),
 				sorter = sorters.highlighter_only(picker_opts),
