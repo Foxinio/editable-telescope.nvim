@@ -22,6 +22,16 @@ With lazy.nvim:
     'nvim-telescope/telescope.nvim',
   },
   config = function()
+    require('telescope').setup({
+      extensions = {
+        editable = {
+          mappings = {
+            change_root = '<C-s>',
+            edit_grep_args = '<C-a>',
+          },
+        },
+      },
+    })
     require('telescope').load_extension('editable')
   end,
 }
@@ -45,6 +55,9 @@ While a picker is open in insert or normal mode:
 
 - `<C-s>` changes the search root.
 - `<C-a>` edits `rg` arguments in `live_grep`.
+
+The keys can be changed under `extensions.editable.mappings` in Telescope's
+setup, as shown in the installation example.
 
 Both pickers accept Telescope picker options:
 

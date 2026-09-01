@@ -9,6 +9,13 @@ local pickers = require('telescope.pickers')
 local sorters = require('telescope.sorters')
 local telescope = require('telescope')
 
+local config = {
+	mappings = {
+		change_root = '<C-s>',
+		edit_grep_args = '<C-a>',
+	},
+}
+
 local function root_label(cwd)
 	local label = vim.fn.fnamemodify(cwd, ':~:.')
 	return label == '' and cwd or label
@@ -26,7 +33,7 @@ local function editable_picker(opts)
 
 		picker_opts.attach_mappings = function(prompt_bufnr, map)
 			if opts.parse_cmd_args then
-				map({ 'i', 'n' }, '<C-a>', function()
+				map({ 'i', 'n' }, config.mappings.edit_grep_args, function()
 					local prompt = action_state.get_current_picker(prompt_bufnr):_get_prompt()
 					actions.close(prompt_bufnr)
 					vim.schedule(function()
@@ -42,7 +49,7 @@ local function editable_picker(opts)
 				end)
 			end
 
-			map({ 'i', 'n' }, '<C-s>', function()
+			map({ 'i', 'n' }, config.mappings.change_root, function()
 				local prompt = action_state.get_current_picker(prompt_bufnr):_get_prompt()
 				actions.close(prompt_bufnr)
 				vim.schedule(function()
@@ -118,6 +125,9 @@ local function live_grep(opts)
 end
 
 return telescope.register_extension({
+	setup = function(ext_config)
+		config = vim.tbl_deep_extend('force', config, ext_config)
+	end,
 	exports = {
 		find_files = find_files,
 		live_grep = live_grep,
