@@ -50,7 +50,15 @@ function M.build(opts, edited, defaults)
 		additional = {}
 	end
 
-	return vim.list_extend(vim.list_extend(vim.deepcopy(opts.vimgrep_arguments or defaults), additional), edited)
+	local command = vim.deepcopy(opts.vimgrep_arguments or defaults)
+	if opts.hidden then
+		table.insert(command, '--hidden')
+	end
+	if opts.no_ignore then
+		table.insert(command, '--no-ignore')
+	end
+
+	return vim.list_extend(vim.list_extend(command, additional), edited)
 end
 
 return M

@@ -40,11 +40,11 @@ local function editable_picker(opts)
 						vim.ui.input({
 							prompt = opts.cmd_args_prompt or 'cmd args: ',
 							default = table.concat(state.cmd_args, ' '),
-						}, function(input)
+						}, vim.schedule_wrap(function(input)
 							open(prompt, input == nil and state or vim.tbl_extend('force', {}, state, {
 								cmd_args = opts.parse_cmd_args(input),
 							}))
-						end)
+						end))
 					end)
 				end)
 			end
@@ -53,7 +53,7 @@ local function editable_picker(opts)
 				local prompt = action_state.get_current_picker(prompt_bufnr):_get_prompt()
 				actions.close(prompt_bufnr)
 				vim.schedule(function()
-					vim.ui.input({ prompt = 'search root: ', default = state.cwd, completion = 'dir' }, function(input)
+					vim.ui.input({ prompt = 'search root: ', default = state.cwd, completion = 'dir' }, vim.schedule_wrap(function(input)
 						if input == nil then
 							open(prompt, state)
 							return
@@ -67,7 +67,7 @@ local function editable_picker(opts)
 						end
 
 						open(prompt, vim.tbl_extend('force', {}, state, { cwd = cwd }))
-					end)
+					end))
 				end)
 			end)
 

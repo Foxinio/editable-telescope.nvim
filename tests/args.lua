@@ -12,6 +12,10 @@ assert(vim.deep_equal(
 	{ 'rg', '--vimgrep', '-g', '*.cpp', '--hidden' }
 ))
 assert(vim.deep_equal(
+	args.build({ hidden = true, no_ignore = true }, {}, { 'rg', '--vimgrep' }),
+	{ 'rg', '--vimgrep', '--hidden', '--no-ignore' }
+))
+assert(vim.deep_equal(
 	args.build({ vimgrep_arguments = { 'custom-rg' }, additional_args = function()
 		return { '--glob=*.lua' }
 	end }, {}, { 'rg' }),
