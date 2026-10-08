@@ -39,7 +39,9 @@ local function editable_picker(opts)
 					vim.schedule(function()
 						vim.ui.input({
 							prompt = opts.cmd_args_prompt or 'cmd args: ',
-							default = table.concat(state.cmd_args, ' '),
+							default = opts.format_cmd_args
+								and opts.format_cmd_args(state.cmd_args)
+								or table.concat(state.cmd_args, ' '),
 						}, vim.schedule_wrap(function(input)
 							open(prompt, input == nil and state or vim.tbl_extend('force', {}, state, {
 								cmd_args = opts.parse_cmd_args(input),
@@ -77,7 +79,7 @@ local function editable_picker(opts)
 		opts.open(state, picker_opts)
 	end
 
-	open(nil)
+	open(nil, opts.initial_state)
 end
 
 local function find_files(opts)
@@ -129,6 +131,7 @@ return telescope.register_extension({
 		config = vim.tbl_deep_extend('force', config, ext_config)
 	end,
 	exports = {
+		editable_picker = editable_picker,
 		find_files = find_files,
 		live_grep = live_grep,
 	},
