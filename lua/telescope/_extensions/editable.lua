@@ -10,11 +10,13 @@ local sorters = require('telescope.sorters')
 local telescope = require('telescope')
 
 local config = {
+	remember_query = false,
 	mappings = {
 		change_root = '<C-s>',
 		edit_grep_args = '<C-a>',
 	},
 }
+local queries = {}
 
 local function root_label(cwd)
 	local label = vim.fn.fnamemodify(cwd, ':~:.')
@@ -32,6 +34,18 @@ local function editable_picker(opts)
 		local attach_mappings = picker_opts.attach_mappings
 
 		picker_opts.attach_mappings = function(prompt_bufnr, map)
+			if config.remember_query and opts.query_key then
+				local picker = action_state.get_current_picker(prompt_bufnr)
+				vim.api.nvim_create_autocmd('BufLeave', {
+					buffer = prompt_bufnr,
+					once = true,
+					callback = function()
+						-- Telescope may have already closed the prompt window.
+						local line = vim.api.nvim_buf_get_lines(prompt_bufnr, 0, 1, false)[1]
+						queries[opts.query_key] = line:sub(#picker.prompt_prefix + 1)
+					end,
+				})
+			end
 			if opts.parse_cmd_args then
 				map({ 'i', 'n' }, config.mappings.edit_grep_args, function()
 					local prompt = action_state.get_current_picker(prompt_bufnr):_get_prompt()
@@ -79,12 +93,17 @@ local function editable_picker(opts)
 		opts.open(state, picker_opts)
 	end
 
-	open(nil, opts.initial_state)
+	local default_text = opts.picker_opts.default_text
+	if default_text == nil and config.remember_query and opts.query_key then
+		default_text = queries[opts.query_key]
+	end
+	open(default_text, opts.initial_state)
 end
 
 local function find_files(opts)
 	opts = opts or {}
 	editable_picker({
+		query_key = 'find_files',
 		picker_opts = opts,
 		prompt_title = function(state)
 			local default_prompt_title = 'Find Files (' .. root_label(state.cwd) .. ')'
@@ -99,6 +118,7 @@ end
 local function live_grep(opts)
 	opts = opts or {}
 	editable_picker({
+		query_key = 'live_grep',
 		picker_opts = opts,
 		cmd_args_prompt = 'rg flags: ',
 		parse_cmd_args = args.split,

@@ -25,6 +25,7 @@ With lazy.nvim:
     require('telescope').setup({
       extensions = {
         editable = {
+          remember_query = false,
           mappings = {
             change_root = '<C-s>',
             edit_grep_args = '<C-a>',
@@ -58,6 +59,13 @@ While a picker is open in insert or normal mode:
 
 The keys can be changed under `extensions.editable.mappings` in Telescope's
 setup, as shown in the installation example.
+
+Set `extensions.editable.remember_query = true` to restore the last query for
+`find_files` and `live_grep` separately, including after selection or cancellation.
+Normal and all-files variants share their picker's query; clearing the prompt
+remembers an empty query. An explicit `default_text` (including `""`) takes
+precedence. Only queries are remembered during the current Neovim session:
+roots and flags are not saved, and nothing persists across restarts.
 
 Both pickers accept Telescope picker options:
 
