@@ -75,3 +75,25 @@ require('telescope').extensions.editable.find_files({
   no_ignore = true,
 })
 ```
+
+## Shared picker API
+
+Other extensions can call `telescope.extensions.editable.editable_picker(opts)`.
+Supply `picker_opts`, `prompt_title(state)`, and `open(state, picker_opts)` to
+create a picker. Optional `initial_state` supplies `cwd` and `cmd_args`;
+`mappings` overrides `change_root` and `edit_grep_args` for this picker only.
+The wrapper preserves the prompt when editing settings and invokes `open` again.
+Pass the supplied `picker_opts.attach_mappings` through to the picker so the
+editing controls remain installed.
+
+To enable argument editing, supply `parse_cmd_args(text)`, optionally returning
+`nil, error` to reject input. The state retains the last accepted `cmd_args`,
+the entered `cmd_args_text`, and `cmd_args_error` (cleared after valid input).
+Consumers decide how to display errors. `format_cmd_args(args, state)` can use
+the raw text as the next input default; without it, arguments are space-joined
+as before. `cmd_args_prompt` customizes the input label.
+
+`require('editable-telescope.args').split(text, true)` opts into strict parsing,
+returning `nil, error` for unfinished quotes or escapes. Without the second
+argument, parsing retains its permissive behavior. `args.format(tokens)` quotes
+tokens for a lossless round trip through `split`; neither function runs a shell.

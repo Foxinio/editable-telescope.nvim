@@ -1,6 +1,6 @@
 local M = {}
 
-function M.split(input)
+function M.split(input, strict)
 	local args, current, quote, escaped = {}, {}, nil, false
 	local started = false
 
@@ -32,6 +32,9 @@ function M.split(input)
 		end
 	end
 
+	if strict and (quote or escaped) then
+		return nil, 'unfinished quote or escape in rg flags'
+	end
 	if escaped then
 		table.insert(current, '\\')
 	end
@@ -40,6 +43,14 @@ function M.split(input)
 	end
 
 	return args
+end
+
+function M.format(args)
+	local out = {}
+	for _, arg in ipairs(args) do
+		out[#out + 1] = "'" .. arg:gsub("'", "'\\''") .. "'"
+	end
+	return table.concat(out, ' ')
 end
 
 function M.build(opts, edited, defaults)

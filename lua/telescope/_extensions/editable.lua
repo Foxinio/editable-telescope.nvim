@@ -24,6 +24,7 @@ local function root_label(cwd)
 end
 
 local function editable_picker(opts)
+	local mappings = vim.tbl_extend('force', {}, config.mappings, opts.mappings or {})
 	local function open(default_text, state)
 		state = vim.tbl_extend('force', { cwd = opts.picker_opts.cwd or vim.fn.getcwd(), cmd_args = {} }, state or {})
 		local picker_opts = vim.tbl_extend('force', opts.picker_opts or {}, {
@@ -47,25 +48,30 @@ local function editable_picker(opts)
 				})
 			end
 			if opts.parse_cmd_args then
-				map({ 'i', 'n' }, config.mappings.edit_grep_args, function()
+				map({ 'i', 'n' }, mappings.edit_grep_args, function()
 					local prompt = action_state.get_current_picker(prompt_bufnr):_get_prompt()
 					actions.close(prompt_bufnr)
 					vim.schedule(function()
 						vim.ui.input({
 							prompt = opts.cmd_args_prompt or 'cmd args: ',
 							default = opts.format_cmd_args
-								and opts.format_cmd_args(state.cmd_args)
+								and opts.format_cmd_args(state.cmd_args, state)
 								or table.concat(state.cmd_args, ' '),
 						}, vim.schedule_wrap(function(input)
-							open(prompt, input == nil and state or vim.tbl_extend('force', {}, state, {
-								cmd_args = opts.parse_cmd_args(input),
-							}))
+							if input == nil then return open(prompt, state) end
+							local parsed, err = opts.parse_cmd_args(input)
+							local updated = vim.tbl_extend('force', {}, state, {
+								cmd_args = parsed or state.cmd_args,
+								cmd_args_text = input,
+							})
+							updated.cmd_args_error = err
+							open(prompt, updated)
 						end))
 					end)
 				end)
 			end
 
-			map({ 'i', 'n' }, config.mappings.change_root, function()
+			map({ 'i', 'n' }, mappings.change_root, function()
 				local prompt = action_state.get_current_picker(prompt_bufnr):_get_prompt()
 				actions.close(prompt_bufnr)
 				vim.schedule(function()

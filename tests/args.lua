@@ -6,6 +6,14 @@ assert(vim.deep_equal(split([[--glob="src files/*.cpp" --hidden]]), { '--glob=sr
 assert(vim.deep_equal(split([[--glob \*.lua]]), { '--glob', '*.lua' }))
 assert(vim.deep_equal(split([[one\ two three]]), { 'one two', 'three' }))
 assert(vim.deep_equal(split([[-g ""]]), { '-g', '' }))
+assert(vim.deep_equal(split([[-g 'unfinished]]), { '-g', 'unfinished' }))
+assert(vim.deep_equal(split('tail\\'), { 'tail\\' }))
+for _, input in ipairs({ [[-g 'unfinished]], 'tail\\' }) do
+	local parsed, err = split(input, true)
+	assert(not parsed and err, input)
+end
+local quoted = { '-g', "it's a/*.lua", '', 'back\\slash', '"double"' }
+assert(vim.deep_equal(split(args.format(quoted), true), quoted))
 
 assert(vim.deep_equal(
 	args.build({ additional_args = { '-g', '*.cpp' } }, { '--hidden' }, { 'rg', '--vimgrep' }),
