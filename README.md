@@ -102,3 +102,9 @@ tokens for a lossless round trip through `split`; neither function runs a shell.
 slash (expanding `~`), or `nil, error` when it is not a directory. `args.build(opts,
 edited, base)` appends `--hidden`/`--no-ignore`, `additional_args` and the edited
 arguments to `opts.vimgrep_arguments` or `base`.
+
+## Tests
+
+`make test` runs the headless tests with Telescope and Plenary from lazy.nvim's
+plugin directory, or from `DEPS_DIR` (`make deps test DEPS_DIR=.deps` clones
+them, as CI does).
