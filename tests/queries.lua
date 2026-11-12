@@ -108,9 +108,9 @@ for _, enabled in ipairs({ false, true }) do
 	end
 	local cwd = current().cwd
 	edit('<C-s>', '/tmp')
-	assert(current().cwd == vim.fn.fnamemodify('/tmp', ':p'))
+	assert(current().cwd == args.normalize_root('/tmp'))
 	edit('<C-s>', nil)
-	assert(current().cwd == vim.fn.fnamemodify('/tmp', ':p'))
+	assert(current().cwd == args.normalize_root('/tmp'))
 	edit('<C-a>', [[--glob '*.lua']])
 	assert(vim.deep_equal(vim.list_slice(command, #command - 1), { '--glob', '*.lua' }))
 	edit('<C-a>', nil)

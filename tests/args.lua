@@ -29,3 +29,11 @@ assert(vim.deep_equal(
 	end }, {}, { 'rg' }),
 	{ 'custom-rg', '--glob=*.lua' }
 ))
+
+local tmp = vim.fn.tempname()
+vim.fn.mkdir(tmp, 'p')
+local resolved = vim.fs.normalize(vim.uv.fs_realpath(tmp))
+assert(args.normalize_root(tmp .. '/') == vim.fs.normalize(tmp))
+assert(args.normalize_root(resolved) == resolved)
+local missing, err = args.normalize_root(tmp .. '/missing')
+assert(missing == nil and err:match('not a directory'))

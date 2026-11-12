@@ -13,7 +13,7 @@ local config = {
 	remember_query = false,
 	mappings = {
 		change_root = '<C-s>',
-		edit_grep_args = '<C-a>',
+		edit_args = '<C-a>',
 	},
 }
 local queries = {}
@@ -23,10 +23,19 @@ local function root_label(cwd)
 	return label == '' and cwd or label
 end
 
+-- `edit_grep_args` is the pre-1.0 name of `edit_args`; keep accepting it.
+local function edit_args_key(mappings)
+	if mappings.edit_args ~= nil then return mappings.edit_args end
+	return mappings.edit_grep_args
+end
+
 local function editable_picker(opts)
+	opts.picker_opts = opts.picker_opts or {}
 	local mappings = vim.tbl_extend('force', {}, config.mappings, opts.mappings or {})
+	mappings.edit_args = edit_args_key(opts.mappings or {}) or edit_args_key(config.mappings)
+	local initial_cwd = args.normalize_root(opts.picker_opts.cwd) or vim.fn.getcwd()
 	local function open(default_text, state)
-		state = vim.tbl_extend('force', { cwd = opts.picker_opts.cwd or vim.fn.getcwd(), cmd_args = {} }, state or {})
+		state = vim.tbl_extend('force', { cwd = initial_cwd, cmd_args = {} }, state or {})
 		local picker_opts = vim.tbl_extend('force', opts.picker_opts or {}, {
 			cwd = state.cwd,
 			default_text = default_text,
@@ -37,18 +46,19 @@ local function editable_picker(opts)
 		picker_opts.attach_mappings = function(prompt_bufnr, map)
 			if config.remember_query and opts.query_key then
 				local picker = action_state.get_current_picker(prompt_bufnr)
+				-- Not `once`: leaving for the preview and coming back must still save the final query.
 				vim.api.nvim_create_autocmd('BufLeave', {
 					buffer = prompt_bufnr,
-					once = true,
 					callback = function()
 						-- Telescope may have already closed the prompt window.
+						if not vim.api.nvim_buf_is_valid(prompt_bufnr) then return end
 						local line = vim.api.nvim_buf_get_lines(prompt_bufnr, 0, 1, false)[1]
-						queries[opts.query_key] = line:sub(#picker.prompt_prefix + 1)
+						if line then queries[opts.query_key] = line:sub(#picker.prompt_prefix + 1) end
 					end,
 				})
 			end
 			if opts.parse_cmd_args then
-				map({ 'i', 'n' }, mappings.edit_grep_args, function()
+				map({ 'i', 'n' }, mappings.edit_args, function()
 					local prompt = action_state.get_current_picker(prompt_bufnr):_get_prompt()
 					actions.close(prompt_bufnr)
 					vim.schedule(function()
@@ -81,9 +91,9 @@ local function editable_picker(opts)
 							return
 						end
 
-						local cwd = vim.fn.fnamemodify(input, ':p')
-						if vim.fn.isdirectory(cwd) == 0 then
-							vim.notify('Search root is not a directory: ' .. input, vim.log.levels.WARN)
+						local cwd, err = args.normalize_root(input)
+						if not cwd then
+							vim.notify(err, vim.log.levels.WARN)
 							open(prompt, state)
 							return
 						end
@@ -155,6 +165,10 @@ end
 return telescope.register_extension({
 	setup = function(ext_config)
 		config = vim.tbl_deep_extend('force', config, ext_config)
+		local user = (ext_config or {}).mappings or {}
+		if user.edit_args == nil and user.edit_grep_args ~= nil then
+			config.mappings.edit_args = user.edit_grep_args
+		end
 	end,
 	exports = {
 		editable_picker = editable_picker,

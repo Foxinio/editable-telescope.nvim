@@ -33,7 +33,7 @@ function M.split(input, strict)
 	end
 
 	if strict and (quote or escaped) then
-		return nil, 'unfinished quote or escape in rg flags'
+		return nil, 'unfinished quote or escape'
 	end
 	if escaped then
 		table.insert(current, '\\')
@@ -70,6 +70,16 @@ function M.build(opts, edited, defaults)
 	end
 
 	return vim.list_extend(vim.list_extend(command, additional), edited)
+end
+
+-- Resolve a search root to an absolute, normalized directory path.
+function M.normalize_root(path)
+	local root = vim.fs.normalize(vim.fn.fnamemodify(vim.fn.expand(path or vim.fn.getcwd()), ':p'))
+	if #root > 1 then root = root:gsub('/$', '') end
+	if vim.fn.isdirectory(root) == 0 then
+		return nil, 'Search root is not a directory: ' .. tostring(path)
+	end
+	return root
 end
 
 return M

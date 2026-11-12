@@ -28,7 +28,7 @@ With lazy.nvim:
           remember_query = false,
           mappings = {
             change_root = '<C-s>',
-            edit_grep_args = '<C-a>',
+            edit_args = '<C-a>',
           },
         },
       },
@@ -81,7 +81,8 @@ require('telescope').extensions.editable.find_files({
 Other extensions can call `telescope.extensions.editable.editable_picker(opts)`.
 Supply `picker_opts`, `prompt_title(state)`, and `open(state, picker_opts)` to
 create a picker. Optional `initial_state` supplies `cwd` and `cmd_args`;
-`mappings` overrides `change_root` and `edit_grep_args` for this picker only.
+`mappings` overrides `change_root` and `edit_args` for this picker only
+(`edit_grep_args` is still accepted as an alias).
 The wrapper preserves the prompt when editing settings and invokes `open` again.
 Pass the supplied `picker_opts.attach_mappings` through to the picker so the
 editing controls remain installed.
@@ -97,3 +98,7 @@ as before. `cmd_args_prompt` customizes the input label.
 returning `nil, error` for unfinished quotes or escapes. Without the second
 argument, parsing retains its permissive behavior. `args.format(tokens)` quotes
 tokens for a lossless round trip through `split`; neither function runs a shell.
+`args.normalize_root(path)` returns an absolute directory path without a trailing
+slash (expanding `~`), or `nil, error` when it is not a directory. `args.build(opts,
+edited, base)` appends `--hidden`/`--no-ignore`, `additional_args` and the edited
+arguments to `opts.vimgrep_arguments` or `base`.
