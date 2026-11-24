@@ -30,6 +30,7 @@ With lazy.nvim:
           mappings = {
             change_root = '<C-s>',
             edit_args = '<C-a>',
+            presets = '<C-o>',
           },
         },
       },
@@ -60,6 +61,7 @@ While a picker is open in insert or normal mode:
 - `<C-s>` changes the search root.
 - `<C-a>` edits `rg` arguments in `live_grep` and `ast-grep` arguments in
   `ast_grep`.
+- `<C-o>` opens a small window with [presets](#presets) for the picker.
 
 The keys can be changed under `extensions.editable.mappings` in Telescope's
 setup, as shown in the installation example.
@@ -115,13 +117,95 @@ The command building and JSON parsing live in `require('editable-telescope.ast_g
 (`build`, `with_pattern`, `parse`, `entry_maker`, `resolve_lang`) for use in
 your own pickers.
 
+## Presets
+
+`<C-o>` opens a small dropdown listing presets for the current picker. Choosing
+one reopens the picker with it applied, keeping the prompt and root; `Default`
+removes it and cancelling (`<Esc>`, `<C-c>`, `q`) returns to the picker
+unchanged. The active preset is marked `●` and shown in the title as `{name}`.
+A preset replaces the edited flags, so `<C-a>` afterwards edits the preset's flags.
+
+Built-in presets:
+
+- **find_files**: all files (hidden and ignored), hidden files, ignored files.
+- **live_grep**: all files, literal, whole word, case sensitive, multiline,
+  same extension as the current file, exclude tests, and file types (Lua,
+  C/C++, Python, Rust, JS/TS, Go, build, config, docs).
+- **ast_grep**:
+  - General searches for the buffer's language: text in comments, text in
+    strings, function definitions, type definitions and function calls. The
+    prompt is a regex here (matched against comment/string text or names), and an
+    empty prompt lists every match. Lua, Python, Rust, C, C++, Go, JS, TS/TSX,
+    Java and Bash are supported (`require('editable-telescope.ast_grep').languages`).
+  - Match modes: relaxed, structure only, exact (`--strictness`), all
+    languages, all files, exclude tests.
+  - Language constructs that put a pattern in the prompt (`Lua: require`,
+    `Rust: unwrap`, `Go: error checks`, `JS/TS: console.log`...). Only the ones
+    for the buffer's filetype are listed (all of them for buffers without one).
+
+Add your own per picker, or turn the built-in ones off:
+
+```lua
+editable = {
+  default_presets = true, -- false, or e.g. { live_grep = false }
+  presets = {
+    live_grep = {
+      { name = 'Verilog', cmd_args = { '--glob', '*.{v,sv,svh}' } },
+      { name = 'TODOs', prompt = 'TODO|FIXME', cmd_args = '--glob !vendor/**' },
+      { name = 'Literal', disabled = true }, -- hide a built-in preset
+    },
+    ast_grep = {
+      { name = 'Lua: setup calls', ft = 'lua', prompt = 'require($M).setup($$$)', opts = { lang = 'lua' } },
+      {
+        name = 'Lua: callbacks',
+        desc = 'functions passed as arguments',
+        ft = 'lua',
+        opts = {
+          lang = 'lua',
+          rule = function() return { kind = 'function_definition', inside = { kind = 'arguments' } } end,
+        },
+      },
+    },
+  },
+  -- Options for the preset window; theme is 'dropdown' (default), 'ivy', 'cursor' or false.
+  presets_picker = { theme = 'dropdown', winblend = 10 },
+}
+```
+
+Preset fields:
+
+| Field      | Meaning                                                                        |
+| ---------- | ------------------------------------------------------------------------------ |
+| `name`     | Shown in the window and title; a preset with a built-in name replaces it.      |
+| `desc`     | Optional description.                                                          |
+| `ft`       | Filetype or list; list the preset only in buffers of those filetypes.          |
+| `cmd_args` | Flags as a list, a string (parsed like `<C-a>` input) or `function(ctx)` (`ctx.bufnr`, `ctx.filetype`, `ctx.filename`). |
+| `opts`     | Picker options, e.g. `hidden`, `no_ignore`, `lang`, `globs`, `rule`.           |
+| `prompt`   | Replaces the prompt.                                                           |
+| `cwd`      | Search root.                                                                   |
+| `disabled` | Hide the preset.                                                               |
+
+A single call can add presets too: `ast_grep({ presets = { ... } })`.
+
+`ast_grep` also accepts `rule = function(prompt, lang)` directly. It returns an
+[ast-grep rule](https://ast-grep.github.io/reference/rule.html) as a Lua table
+(or nil when the language is not supported) and switches the picker to
+`ast-grep scan --inline-rules`. The language is `lang` or a `-l` in the edited
+flags. The rules behind the general presets are
+`require('editable-telescope.ast_grep').rules` (`comments`, `strings`,
+`functions`, `types`, `calls`).
+
 ## Shared picker API
 
 Other extensions can call `telescope.extensions.editable.editable_picker(opts)`.
 Supply `picker_opts`, `prompt_title(state)`, and `open(state, picker_opts)` to
 create a picker. Optional `initial_state` supplies `cwd` and `cmd_args`;
-`mappings` overrides `change_root` and `edit_args` for this picker only
-(`edit_grep_args` is still accepted as an alias).
+`mappings` overrides `change_root`, `edit_args` and `presets` for this picker only
+(`edit_grep_args` is still accepted as an alias). `presets` (a list, or
+`function(ctx)` returning one) enables the preset window; a preset's `opts` are
+merged into `picker_opts` before `open` is called, and `state.preset` holds its
+name. After a preset is applied `state.cmd_args_text` is nil, so
+`format_cmd_args` should fall back to `args`.
 The wrapper preserves the prompt when editing settings and invokes `open` again.
 Pass the supplied `picker_opts.attach_mappings` through to the picker so the
 editing controls remain installed.
