@@ -1,6 +1,7 @@
 local actions = require('telescope.actions')
 local action_state = require('telescope.actions.state')
 local args = require('editable-telescope.args')
+local ast_grep_util = require('editable-telescope.ast_grep')
 local builtin = require('telescope.builtin')
 local conf = require('telescope.config').values
 local finders = require('telescope.finders')
@@ -162,6 +163,47 @@ local function live_grep(opts)
 	})
 end
 
+local function ast_grep(opts)
+	opts = opts or {}
+	-- Capture the language now: once the picker is open the prompt buffer is current.
+	local lang = ast_grep_util.resolve_lang(opts)
+	editable_picker({
+		query_key = 'ast_grep',
+		picker_opts = opts,
+		cmd_args_prompt = 'ast-grep flags: ',
+		parse_cmd_args = args.split,
+		prompt_title = function(state)
+			if opts.prompt_title then return opts.prompt_title end
+			local parts = { 'AST Grep (' .. root_label(state.cwd) .. ')' }
+			if lang then parts[#parts + 1] = '<' .. lang .. '>' end
+			parts[#parts + 1] = '[' .. table.concat(state.cmd_args, ' ') .. ']'
+			return table.concat(parts, ' ')
+		end,
+		open = function(state, picker_opts)
+			picker_opts.lang = lang
+			picker_opts.entry_maker = picker_opts.entry_maker or ast_grep_util.entry_maker(picker_opts)
+			local command = ast_grep_util.build(picker_opts, state.cmd_args)
+			local search_dirs = picker_opts.search_dirs
+			if search_dirs then
+				search_dirs = vim.tbl_map(function(dir) return vim.fn.expand(dir) end, search_dirs)
+			end
+
+			pickers.new(picker_opts, {
+				finder = finders.new_job(function(prompt)
+					if not prompt or prompt == '' then
+						return nil
+					end
+
+					return ast_grep_util.with_pattern(command, prompt, search_dirs)
+				end, picker_opts.entry_maker, picker_opts.max_results, picker_opts.cwd),
+				previewer = conf.grep_previewer(picker_opts),
+				sorter = sorters.highlighter_only(picker_opts),
+				attach_mappings = picker_opts.attach_mappings,
+			}):find()
+		end,
+	})
+end
+
 return telescope.register_extension({
 	setup = function(ext_config)
 		config = vim.tbl_deep_extend('force', config, ext_config)
@@ -174,5 +216,6 @@ return telescope.register_extension({
 		editable_picker = editable_picker,
 		find_files = find_files,
 		live_grep = live_grep,
+		ast_grep = ast_grep,
 	},
 })

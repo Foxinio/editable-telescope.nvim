@@ -17,4 +17,5 @@ jobs:
         with:
           neovim: true
           version: ${{ matrix.nvim }}
+      - run: npm install -g @ast-grep/cli
       - run: make deps test DEPS_DIR=.deps

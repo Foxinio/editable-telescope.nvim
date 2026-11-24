@@ -1,15 +1,16 @@
 # editable-telescope.nvim
 
 A small [Telescope](https://github.com/nvim-telescope/telescope.nvim) extension
-whose file and grep pickers let you change the search root without losing the
-current prompt. The grep picker also lets you edit `rg` arguments while it is
-open.
+whose file, grep and [ast-grep](https://ast-grep.github.io) pickers let you
+change the search root without losing the current prompt. The grep and ast-grep
+pickers also let you edit their command-line flags while they are open.
 
 ## Requirements
 
 - Neovim
 - [telescope.nvim](https://github.com/nvim-telescope/telescope.nvim)
 - [ripgrep](https://github.com/BurntSushi/ripgrep) for `live_grep`
+- [ast-grep](https://ast-grep.github.io) (the `ast-grep` executable) for `ast_grep`
 
 ## Installation
 
@@ -43,6 +44,7 @@ With lazy.nvim:
 ```vim
 :Telescope editable find_files
 :Telescope editable live_grep
+:Telescope editable ast_grep
 ```
 
 Or call the exported pickers from Lua:
@@ -50,18 +52,20 @@ Or call the exported pickers from Lua:
 ```lua
 require('telescope').extensions.editable.find_files()
 require('telescope').extensions.editable.live_grep()
+require('telescope').extensions.editable.ast_grep()
 ```
 
 While a picker is open in insert or normal mode:
 
 - `<C-s>` changes the search root.
-- `<C-a>` edits `rg` arguments in `live_grep`.
+- `<C-a>` edits `rg` arguments in `live_grep` and `ast-grep` arguments in
+  `ast_grep`.
 
 The keys can be changed under `extensions.editable.mappings` in Telescope's
 setup, as shown in the installation example.
 
 Set `extensions.editable.remember_query = true` to restore the last query for
-`find_files` and `live_grep` separately, including after selection or cancellation.
+`find_files`, `live_grep` and `ast_grep` separately, including after selection or cancellation.
 Normal and all-files variants share their picker's query; clearing the prompt
 remembers an empty query. An explicit `default_text` (including `""`) takes
 precedence. Only queries are remembered during the current Neovim session:
@@ -75,6 +79,41 @@ require('telescope').extensions.editable.find_files({
   no_ignore = true,
 })
 ```
+
+## ast-grep
+
+`ast_grep` runs `ast-grep run --pattern=<prompt>` on every prompt change, so the
+prompt is a structural pattern such as `foo($A)` or `if err != nil { $$$ }`.
+Results look like `live_grep` results (same path display, quickfix and grep
+previewer), but the preview highlights the whole matched node, including
+multi-line matches. Each entry also carries the decoded ast-grep result as
+`entry.match` (meta variables, language, byte offsets) for custom actions.
+
+Besides the usual Telescope picker options it accepts:
+
+| Option            | Meaning                                                                                  |
+| ----------------- | ---------------------------------------------------------------------------------------- |
+| `lang`            | Pattern language passed as `--lang`. `true` uses the filetype of the buffer you opened the picker from. Without it ast-grep infers the language from each file's extension. |
+| `command`         | Executable, `ast-grep` by default (`sg` is `newgrp` on many Linux systems).            |
+| `hidden`          | Adds `--no-ignore hidden`.                                                               |
+| `no_ignore`       | Adds `--no-ignore` for `dot`, `exclude`, `global`, `parent` and `vcs`, like `rg --no-ignore`. |
+| `globs`           | List of `--globs` values.                                                                |
+| `search_dirs`     | Paths to search, relative to the root.                                                   |
+| `additional_args` | Extra flags (table or `function(opts)`), placed before the edited ones.                  |
+
+```lua
+vim.keymap.set('n', '<leader>sa', function()
+  require('telescope').extensions.editable.ast_grep({ lang = true })
+end, { desc = '[S]earch [A]ST in current language' })
+```
+
+Edited flags (`<C-a>`) are appended last, so `--strictness relaxed`,
+`--globs '!tests/**'` or `--selector call_expression` work as expected. A language
+given there (`-l rust`, `--lang=rust`) replaces the `lang` option.
+
+The command building and JSON parsing live in `require('editable-telescope.ast_grep')`
+(`build`, `with_pattern`, `parse`, `entry_maker`, `resolve_lang`) for use in
+your own pickers.
 
 ## Shared picker API
 
@@ -107,4 +146,5 @@ arguments to `opts.vimgrep_arguments` or `base`.
 
 `make test` runs the headless tests with Telescope and Plenary from lazy.nvim's
 plugin directory, or from `DEPS_DIR` (`make deps test DEPS_DIR=.deps` clones
-them, as CI does).
+them, as CI does). The `ast_grep` picker tests run only when `ast-grep` is on
+`PATH` (`npm install -g @ast-grep/cli`); the parsing tests always run.
