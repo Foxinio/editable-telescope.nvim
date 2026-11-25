@@ -7,13 +7,38 @@ local list = presets.resolve('live_grep', {
 	presets = { live_grep = { { name = 'Whole word', cmd_args = '-w' }, { name = 'Mine', cmd_args = {} } } },
 }, { { name = 'Call', cmd_args = {} }, { name = 'Literal', disabled = true } }, ctx)
 local names = vim.tbl_map(function(p) return p.name end, list)
-assert(names[1] == 'All files' and names[#names - 1] == 'Mine' and names[#names] == 'Call', vim.inspect(names))
+assert(names[1] == 'Whole word' and names[#names - 1] == 'Mine' and names[#names] == 'Call', vim.inspect(names))
 assert(not vim.tbl_contains(names, 'Literal'))
 local whole = list[vim.fn.index(names, 'Whole word') + 1]
 assert(vim.deep_equal(presets.cmd_args(whole, ctx), { '-w' }))
 assert(#presets.resolve('live_grep', { default_presets = false }, nil, ctx) == 0)
 assert(#presets.resolve('live_grep', { default_presets = { live_grep = false } }, nil, ctx) == 0)
 assert(#presets.resolve('find_files', { default_presets = { live_grep = false } }, nil, ctx) > 0)
+
+-- Built-in presets can be enabled or disabled group by group.
+local function groups_of(setting, filetype)
+	local seen = {}
+	for _, p in ipairs(presets.resolve('ast_grep', { default_presets = { ast_grep = setting } }, nil, { filetype = filetype or '' })) do
+		seen[p.group] = true
+	end
+	return vim.tbl_keys(seen)
+end
+local everything = groups_of(nil)
+assert(#everything == 2 + #presets.language_groups(), vim.inspect(everything))
+local only = groups_of({ 'general', 'lua', 'rust' })
+table.sort(only)
+assert(vim.deep_equal(only, { 'general', 'lua', 'rust' }), vim.inspect(only))
+local dropped = groups_of({ rust = false, match = false })
+assert(not vim.tbl_contains(dropped, 'rust') and not vim.tbl_contains(dropped, 'match') and vim.tbl_contains(dropped, 'go'))
+assert(#groups_of(false) == 0)
+-- Group filtering applies to built-in presets only.
+local kept = presets.resolve('ast_grep', { default_presets = { ast_grep = {} }, presets = { ast_grep = { { name = 'Mine' } } } }, nil, ctx)
+assert(#kept == 1 and kept[1].name == 'Mine')
+local lg = vim.tbl_map(function(p) return p.name end, presets.resolve('live_grep', { default_presets = { live_grep = { 'modes' } } }, nil, ctx))
+assert(vim.deep_equal(lg, { 'Literal', 'Whole word', 'Case sensitive', 'Multiline' }), vim.inspect(lg))
+-- In a C++ buffer both the C/C++ and the C++ groups are listed.
+local cpp = groups_of(nil, 'cpp')
+assert(vim.tbl_contains(cpp, 'c') and vim.tbl_contains(cpp, 'cpp') and not vim.tbl_contains(cpp, 'lua'))
 
 -- Function cmd_args get the context.
 local same_ext = list[vim.fn.index(names, 'Same extension') + 1]
@@ -73,7 +98,7 @@ end
 -- Open the preset window, then choose `name` (or cancel with nil).
 local function choose(name, key)
 	local picker = current()
-	vim.fn.maparg(key or '<C-o>', 'n', false, true).callback()
+	vim.fn.maparg(key or '<C-b>', 'n', false, true).callback()
 	local window = wait_picker(picker, '^Presets$')
 	assert(window.layout_strategy == 'center' and window.previewer == nil, 'expected the dropdown theme')
 	if not name then
@@ -124,17 +149,17 @@ actions.close(current().prompt_bufnr)
 builtin.find_files = find_files
 
 -- Remapping or disabling the key.
-telescope.setup({ extensions = { editable = { mappings = { presets = '<C-b>' } } } })
+telescope.setup({ extensions = { editable = { mappings = { presets = '<C-e>' } } } })
 telescope.load_extension('editable')
 editable.live_grep()
-assert(vim.fn.maparg('<C-b>', 'n', false, true).buffer == 1 and vim.fn.maparg('<C-o>', 'n') == '')
+assert(vim.fn.maparg('<C-e>', 'n', false, true).buffer == 1 and vim.fn.maparg('<C-b>', 'n') == '')
 actions.close(current().prompt_bufnr)
 telescope.setup({ extensions = { editable = { mappings = { presets = false } } } })
 telescope.load_extension('editable')
 editable.live_grep()
-assert(vim.fn.maparg('<C-b>', 'n') == '')
+assert(vim.fn.maparg('<C-e>', 'n') == '')
 actions.close(current().prompt_bufnr)
-telescope.setup({ extensions = { editable = { mappings = { presets = '<C-o>' } } } })
+telescope.setup({ extensions = { editable = { mappings = { presets = '<C-b>' } } } })
 telescope.load_extension('editable')
 
 if vim.fn.executable(ast_grep.default_command) == 0 then

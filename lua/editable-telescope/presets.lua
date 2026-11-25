@@ -32,96 +32,273 @@ local test_globs = {
 	'--glob', '!*_test.*', '--glob', '!*.test.*', '--glob', '!*.spec.*', '--glob', '!test_*',
 }
 
+-- Every built-in preset has a `group`; `default_presets` can enable or disable
+-- built-in presets group by group (see `M.resolve`).
+local function grouped(group, list)
+	for _, preset in ipairs(list) do preset.group = group end
+	return list
+end
+
+local function concat(lists)
+	local out = {}
+	for _, list in ipairs(lists) do vim.list_extend(out, list) end
+	return out
+end
+
 M.defaults = {}
 
-M.defaults.find_files = {
+M.defaults.find_files = grouped('scope', {
 	{ name = 'All files', desc = 'hidden and ignored', opts = { hidden = true, no_ignore = true } },
 	{ name = 'Hidden files', desc = 'dotfiles, still respecting .gitignore', opts = { hidden = true } },
 	{ name = 'Ignored files', desc = 'skip .gitignore, no dotfiles', opts = { no_ignore = true } },
-}
+})
 
-M.defaults.live_grep = {
-	{ name = 'All files', desc = 'hidden and ignored', cmd_args = { '--hidden', '--no-ignore' } },
-	{ name = 'Literal', desc = 'no regex', cmd_args = { '--fixed-strings' } },
-	{ name = 'Whole word', cmd_args = { '--word-regexp' } },
-	{ name = 'Case sensitive', cmd_args = { '--case-sensitive' } },
-	{ name = 'Multiline', desc = '. and \\n match across lines', cmd_args = { '--multiline', '--multiline-dotall' } },
-	{ name = 'Same extension', desc = "as the current file", cmd_args = ext_glob },
-	{ name = 'Exclude tests', cmd_args = test_globs },
-	{ name = 'Lua files', cmd_args = rg_types('lua') },
-	{ name = 'C/C++ files', cmd_args = rg_types('c', 'cpp') },
-	{ name = 'Python files', cmd_args = rg_types('py') },
-	{ name = 'Rust files', cmd_args = rg_types('rust') },
-	{ name = 'JS/TS files', cmd_args = rg_types('js', 'ts') },
-	{ name = 'Go files', cmd_args = rg_types('go') },
-	{ name = 'Build files', desc = 'CMake, Make', cmd_args = { '--type', 'cmake', '--type', 'make' } },
-	{ name = 'Config files', desc = 'JSON, YAML, TOML', cmd_args = rg_types('json', 'yaml', 'toml') },
-	{ name = 'Docs', desc = 'Markdown', cmd_args = rg_types('md') },
-}
+M.defaults.live_grep = concat({
+	grouped('modes', {
+		{ name = 'Literal', desc = 'no regex', cmd_args = { '--fixed-strings' } },
+		{ name = 'Whole word', cmd_args = { '--word-regexp' } },
+		{ name = 'Case sensitive', cmd_args = { '--case-sensitive' } },
+		{ name = 'Multiline', desc = '. and \\n match across lines', cmd_args = { '--multiline', '--multiline-dotall' } },
+	}),
+	grouped('scope', {
+		{ name = 'All files', desc = 'hidden and ignored', cmd_args = { '--hidden', '--no-ignore' } },
+		{ name = 'Same extension', desc = 'as the current file', cmd_args = ext_glob },
+		{ name = 'Exclude tests', cmd_args = test_globs },
+	}),
+	grouped('types', {
+		{ name = 'Lua files', cmd_args = rg_types('lua') },
+		{ name = 'C/C++ files', cmd_args = rg_types('c', 'cpp') },
+		{ name = 'Python files', cmd_args = rg_types('py') },
+		{ name = 'Rust files', cmd_args = rg_types('rust') },
+		{ name = 'JS/TS files', cmd_args = rg_types('js', 'ts') },
+		{ name = 'Go files', cmd_args = rg_types('go') },
+		{ name = 'Java files', cmd_args = rg_types('java') },
+		{ name = 'Shell files', cmd_args = rg_types('sh') },
+		{ name = 'Build files', desc = 'CMake, Make', cmd_args = rg_types('cmake', 'make') },
+		{ name = 'Config files', desc = 'JSON, YAML, TOML', cmd_args = rg_types('json', 'yaml', 'toml') },
+		{ name = 'Docs', desc = 'Markdown', cmd_args = rg_types('md') },
+	}),
+})
 
--- ast-grep presets: general ones first, then language constructs. The latter
--- are filtered by the buffer's filetype so the list stays short.
-local function rule(name, desc, fn)
-	return { name = name, desc = desc, opts = { rule = fn, lang = true } }
+-- ast-grep language groups. Each entry is `{ name, prompt, rule = ... }`:
+-- without a rule the prompt is an ast-grep pattern, with one it is the regex
+-- the rule filters by. Presets are listed only for the group's filetypes and
+-- search in the buffer's language, or the group's `lang` without a filetype.
+-- (A bare call parses as a type in C, so C calls use rules or statements.)
+local function language_groups()
+	local rules = require('editable-telescope.ast_grep').rules
+	local calls, kind = rules.calls, rules.kind
+	return {
+		{
+			group = 'lua', label = 'Lua', lang = 'lua', ft = { 'lua' },
+			{ 'require', 'require($MOD)' },
+			{ 'setup calls', 'require($MOD).setup($$$)' },
+			{ 'keymaps', 'vim.keymap.set($MODE, $LHS, $$$)' },
+			{ 'autocommands', 'vim.api.nvim_create_autocmd($EVENT, $$$)' },
+			{ 'user commands', 'vim.api.nvim_create_user_command($NAME, $$$)' },
+			{ 'vim.cmd', 'vim.cmd($$$)' },
+			{ 'notifications', 'vim.notify($$$)' },
+			{ 'scheduled callbacks', '^vim\\.(schedule|schedule_wrap|defer_fn)$', rule = calls },
+			{ 'pcall', '^x?pcall$', rule = calls },
+			{ 'pairs loops', 'for $K, $V in pairs($T) do $$$ end' },
+			{ 'ipairs loops', 'for $I, $V in ipairs($T) do $$$ end' },
+			{ 'methods', 'function $T:$METHOD($$$) $$$ end' },
+			{ 'module tables', 'local $M = {}' },
+			{ 'vim.loop (deprecated)', 'vim.loop.$FN($$$)' },
+			{ 'anonymous functions', '', rule = kind('function_definition') },
+		},
+		{
+			group = 'python', label = 'Python', lang = 'python', ft = { 'python' },
+			{ 'import', 'import $MOD' },
+			{ 'from import', 'from $MOD import $$$' },
+			{ 'print', 'print($$$)' },
+			{ '== None', '$X == None' },
+			{ '!= None', '$X != None' },
+			{ 'isinstance', 'isinstance($X, $TYPE)' },
+			{ 'self attributes', 'self.$ATTR = $VALUE' },
+			{ 'list comprehensions', '[$E for $X in $ITER]' },
+			{ 'lambdas', 'lambda $$$: $E' },
+			{ 'open', 'open($$$)' },
+			{ 'raise', 'raise $E' },
+			{ 'assert', 'assert $$$' },
+			{ 'eval/exec', '^(eval|exec)$', rule = calls },
+			{ 'subprocess', '^subprocess\\.', rule = calls },
+			{ 'decorators', '', rule = kind('decorator') },
+			{ 'with blocks', '', rule = kind('with_statement') },
+			{ 'bare except', '^except\\s*:', rule = kind('except_clause') },
+		},
+		{
+			group = 'rust', label = 'Rust', lang = 'rust', ft = { 'rust' },
+			{ 'unwrap', '$E.unwrap()' },
+			{ 'expect', '$E.expect($MSG)' },
+			{ '? operator', '$E?' },
+			{ 'panics', '^(panic|todo|unimplemented|unreachable)$', rule = calls },
+			{ 'debug output', '^(println|eprintln|print|eprint|dbg)$', rule = calls },
+			{ 'unsafe blocks', 'unsafe { $$$ }' },
+			{ 'clone', '$E.clone()' },
+			{ 'trait impls', 'impl $TRAIT for $TYPE { $$$ }' },
+			{ 'all impls', '', rule = kind('impl_item') },
+			{ 'match', 'match $E { $$$ }' },
+			{ 'Box::new', 'Box::new($E)' },
+			{ 'Rc/Arc', '^(Rc|Arc)::new$', rule = calls },
+			{ '.await', '$E.await' },
+			{ 'casts', '$E as $TYPE' },
+			{ 'derives', 'derive', rule = kind('attribute_item') },
+			{ 'closures', '', rule = kind('closure_expression') },
+		},
+		{
+			group = 'c', label = 'C/C++', lang = 'c', ft = { 'c', 'cpp' },
+			{ 'includes', '#include $HEADER' },
+			{ 'macros', '', rule = kind('preproc_def', 'preproc_function_def') },
+			{ 'allocations', '^(malloc|calloc|realloc|free)$', rule = calls },
+			{ 'unsafe string functions', '^(strcpy|strcat|sprintf|vsprintf|gets)$', rule = calls },
+			{ 'printf family', '^(printf|fprintf|sprintf|snprintf|puts)$', rule = calls },
+			{ 'NULL checks', 'NULL', rule = kind('binary_expression') },
+			{ 'goto', 'goto $LABEL;' },
+			{ 'sizeof', '', rule = kind('sizeof_expression') },
+			{ 'switch', '', rule = kind('switch_statement') },
+			{ 'static functions', '^static', rule = kind('function_definition') },
+			{ 'casts', '', rule = kind('cast_expression') },
+		},
+		{
+			group = 'cpp', label = 'C++', lang = 'cpp', ft = { 'cpp' },
+			{ 'new', 'new $TYPE($$$)' },
+			{ 'delete', '', rule = kind('delete_expression') },
+			{ 'smart pointers', '^std::make_(shared|unique)', rule = calls },
+			{ 'std::move', '^std::(move|forward)$', rule = calls },
+			{ 'C++ casts', '^(static|dynamic|reinterpret|const)_cast', rule = calls },
+			{ 'lambdas', '', rule = kind('lambda_expression') },
+			{ 'range for', '', rule = kind('for_range_loop') },
+			{ 'auto declarations', 'auto $X = $E;' },
+			{ 'using namespace', 'using namespace $NS;' },
+			{ 'templates', '', rule = kind('template_declaration') },
+			{ 'std::cout', 'std::cout << $$$' },
+			{ 'classes', '', rule = kind('class_specifier') },
+		},
+		{
+			group = 'go', label = 'Go', lang = 'go', ft = { 'go' },
+			{ 'error checks', 'if err != nil { $$$ }' },
+			{ 'error assignments', '$V, err := $CALL' },
+			{ 'goroutines', 'go $FN($$$)' },
+			{ 'defer', 'defer $FN($$$)' },
+			{ 'panic', 'panic($$$)' },
+			{ 'fmt output', '^fmt\\.(Print|Fprint|Sprint)', rule = calls },
+			{ 'make', 'make($$$)' },
+			{ 'channel sends', '$CH <- $V' },
+			{ 'channel receives', '<-$CH' },
+			{ 'select', '', rule = kind('select_statement') },
+			{ 'type assertions', '$X.($TYPE)' },
+			{ 'context roots', '^context\\.(TODO|Background)$', rule = calls },
+			{ 'closures', '', rule = kind('func_literal') },
+		},
+		{
+			group = 'javascript', label = 'JS/TS', lang = 'javascript',
+			ft = { 'javascript', 'javascriptreact', 'typescript', 'typescriptreact' },
+			{ 'console', '^console\\.', rule = calls },
+			{ 'await', 'await $E' },
+			{ 'import from', "import $$$ from '$MOD'" },
+			{ 'require', 'require($MOD)' },
+			{ 'exports', '', rule = kind('export_statement') },
+			{ 'arrow functions', '', rule = kind('arrow_function') },
+			{ 'promise then', '$P.then($$$)' },
+			{ 'fetch', 'fetch($$$)' },
+			{ 'JSON', '^JSON\\.(parse|stringify)$', rule = calls },
+			{ 'timers', '^(setTimeout|setInterval)$', rule = calls },
+			{ 'event listeners', '$TARGET.addEventListener($$$)' },
+			{ 'loose equality', '$A == $B' },
+			{ 'React hooks', '^use[A-Z]', rule = calls },
+			{ 'template literals', '', rule = kind('template_string') },
+			{ 'debugger', '', rule = kind('debugger_statement') },
+		},
+		{
+			group = 'typescript', label = 'TS', lang = 'typescript', ft = { 'typescript', 'typescriptreact' },
+			{ 'as any', '$E as any' },
+			{ 'any annotations', 'any', rule = kind('type_annotation') },
+			{ 'non-null assertions', '$E!' },
+			{ 'ts-ignore', '@ts-(ignore|expect-error|nocheck)', rule = kind('comment') },
+			{ 'interfaces', '', rule = kind('interface_declaration') },
+			{ 'type aliases', '', rule = kind('type_alias_declaration') },
+			{ 'enums', '', rule = kind('enum_declaration') },
+			{ 'satisfies', '$E satisfies $TYPE' },
+			{ 'decorators', '', rule = kind('decorator') },
+		},
+		{
+			group = 'java', label = 'Java', lang = 'java', ft = { 'java' },
+			{ 'System.out', 'System.out.$METHOD($$$)' },
+			{ 'printStackTrace', '$E.printStackTrace()' },
+			{ 'new', 'new $TYPE($$$)' },
+			{ 'throw', 'throw $E;' },
+			{ 'catch blocks', '', rule = kind('catch_clause') },
+			{ 'equals', '$A.equals($B)' },
+			{ 'annotations', '', rule = kind('marker_annotation', 'annotation') },
+			{ 'Optional', '^Optional\\.', rule = kind('method_invocation') },
+			{ 'streams', '$E.stream()' },
+			{ 'lambdas', '', rule = kind('lambda_expression') },
+			{ 'synchronized', '', rule = kind('synchronized_statement') },
+		},
+		{
+			group = 'bash', label = 'Bash', lang = 'bash', ft = { 'sh', 'bash', 'zsh' },
+			{ 'eval', '^eval$', rule = calls },
+			{ 'rm', '^rm$', rule = calls },
+			{ 'sudo', '^sudo$', rule = calls },
+			{ 'downloads', '^(curl|wget)$', rule = calls },
+			{ 'source', '^(source|\\.)$', rule = calls },
+			{ 'echo/printf', '^(echo|printf)$', rule = calls },
+			{ 'command substitution', '', rule = kind('command_substitution') },
+			{ 'tests', '', rule = kind('test_command') },
+			{ 'pipelines', '', rule = kind('pipeline') },
+			{ 'heredocs', '', rule = kind('heredoc_redirect') },
+			{ 'exports', '^export', rule = kind('declaration_command') },
+			{ 'assignments', '', rule = kind('variable_assignment') },
+		},
+	}
 end
-local function pattern(ft, name, prompt, lang)
-	return { name = name, desc = prompt, ft = ft, prompt = prompt, opts = { lang = lang or true } }
+
+-- Names of the ast-grep language groups, in order.
+function M.language_groups()
+	return vim.tbl_map(function(g) return g.group end, language_groups())
 end
 
 M.defaults.ast_grep = function()
 	local rules = require('editable-telescope.ast_grep').rules
-	local c_like = { 'c', 'cpp' }
-	local js_like = { 'javascript', 'javascriptreact', 'typescript', 'typescriptreact' }
-	local ts_like = { 'typescript', 'typescriptreact' }
-	return {
-		rule('Text in comments', 'prompt is a regex; empty lists all comments', rules.comments),
-		rule('Text in strings', 'prompt is a regex; empty lists all strings', rules.strings),
-		rule('Function definitions', 'prompt filters names (regex)', rules.functions),
-		rule('Type definitions', 'classes, structs, enums...; prompt filters names', rules.types),
-		rule('Function calls', 'prompt filters the called name (regex)', rules.calls),
-		{ name = 'Relaxed match', desc = 'ignore comments', cmd_args = { '--strictness', 'relaxed' } },
-		{ name = 'Structure only', desc = 'ignore names and text', cmd_args = { '--strictness', 'signature' } },
-		{ name = 'Exact match', desc = 'every node, including punctuation', cmd_args = { '--strictness', 'cst' } },
-		{ name = 'All languages', desc = 'language inferred per file', opts = { lang = false } },
-		{ name = 'All files', desc = 'hidden and ignored', opts = { hidden = true, no_ignore = true } },
-		{ name = 'Exclude tests', opts = { globs = { '!**/test/**', '!**/tests/**', '!*_test.*', '!*.test.*', '!*.spec.*', '!test_*' } } },
-
-		pattern('lua', 'Lua: require', 'require($MOD)', 'lua'),
-		pattern('lua', 'Lua: keymaps', 'vim.keymap.set($MODE, $LHS, $$$)', 'lua'),
-		pattern('lua', 'Lua: autocommands', 'vim.api.nvim_create_autocmd($EVENT, $$$)', 'lua'),
-		pattern('lua', 'Lua: pcall', 'pcall($FN, $$$)', 'lua'),
-		pattern('lua', 'Lua: vim.loop (deprecated)', 'vim.loop.$FN($$$)', 'lua'),
-
-		pattern('python', 'Python: imports from', 'from $MOD import $$$', 'python'),
-		pattern('python', 'Python: print', 'print($$$)', 'python'),
-		pattern('python', 'Python: == None', '$X == None', 'python'),
-		pattern('python', 'Python: attribute assignment', 'self.$ATTR = $VALUE', 'python'),
-
-		pattern('rust', 'Rust: unwrap', '$E.unwrap()', 'rust'),
-		pattern('rust', 'Rust: expect', '$E.expect($MSG)', 'rust'),
-		pattern('rust', 'Rust: unsafe blocks', 'unsafe { $$$ }', 'rust'),
-		pattern('rust', 'Rust: todo!', 'todo!($$$)', 'rust'),
-		pattern('rust', 'Rust: trait impls', 'impl $TRAIT for $TYPE { $$$ }', 'rust'),
-
-		pattern(c_like, 'C/C++: includes', '#include $HEADER'),
-		-- A bare call parses as a type in C, so calls use a rule or a statement.
-		{
-			name = 'C/C++: allocations', desc = 'malloc, calloc, realloc, free', ft = c_like,
-			prompt = '^(malloc|calloc|realloc|free)$', opts = { rule = rules.calls, lang = true },
-		},
-		pattern(c_like, 'C/C++: printf', 'printf($$$);'),
-		pattern('cpp', 'C++: new', 'new $TYPE($$$)', 'cpp'),
-		pattern('cpp', 'C++: make_shared', 'std::make_shared<$TYPE>($$$)', 'cpp'),
-
-		pattern('go', 'Go: error checks', 'if err != nil { $$$ }', 'go'),
-		pattern('go', 'Go: goroutines', 'go $FN($$$)', 'go'),
-		pattern('go', 'Go: defer', 'defer $FN($$$)', 'go'),
-
-		pattern(js_like, 'JS/TS: console.log', 'console.log($$$)'),
-		pattern(js_like, 'JS/TS: await', 'await $E'),
-		pattern(js_like, 'JS/TS: imports', "import $$$ from '$MOD'"),
-		pattern(ts_like, 'TS: as any', '$E as any'),
-	}
+	local function search(name, desc, fn, prompt)
+		return { name = name, desc = desc, prompt = prompt, opts = { rule = fn, lang = true } }
+	end
+	local list = concat({
+		grouped('general', {
+			search('Text in comments', 'prompt is a regex; empty lists all', rules.comments),
+			search('TODO comments', 'TODO, FIXME, HACK, XXX', rules.comments, 'TODO|FIXME|HACK|XXX'),
+			search('Text in strings', 'prompt is a regex; empty lists all', rules.strings),
+			search('Function definitions', 'prompt filters names', rules.functions),
+			search('Type definitions', 'classes, structs, enums...; prompt filters names', rules.types),
+			search('Function calls', 'prompt filters the called name', rules.calls),
+			search('Imports', 'prompt filters the import text', rules.imports),
+			search('Loops', 'prompt filters the loop text', rules.loops),
+			search('Error handling', 'try blocks; prompt filters their text', rules.errors),
+		}),
+		grouped('match', {
+			{ name = 'Relaxed match', desc = 'ignore comments', cmd_args = { '--strictness', 'relaxed' } },
+			{ name = 'Structure only', desc = 'ignore names and text', cmd_args = { '--strictness', 'signature' } },
+			{ name = 'Exact match', desc = 'every node, including punctuation', cmd_args = { '--strictness', 'cst' } },
+			{ name = 'All languages', desc = 'language inferred per file', opts = { lang = false } },
+			{ name = 'All files', desc = 'hidden and ignored', opts = { hidden = true, no_ignore = true } },
+			{ name = 'Exclude tests', opts = { globs = { '!**/test/**', '!**/tests/**', '!*_test.*', '!*.test.*', '!*.spec.*', '!test_*' } } },
+		}),
+	})
+	for _, g in ipairs(language_groups()) do
+		for _, item in ipairs(g) do
+			local name, prompt = item[1], item[2]
+			list[#list + 1] = {
+				name = g.label .. ': ' .. name,
+				desc = item.rule and (prompt ~= '' and 'regex ' .. prompt or nil) or prompt,
+				group = g.group,
+				ft = g.ft,
+				prompt = prompt,
+				opts = { lang = true, fallback_lang = g.lang, rule = item.rule },
+			}
+		end
+	end
+	return list
 end
 
 -- Turn a preset's `cmd_args` into a list (or nil when it has none).
@@ -138,19 +315,30 @@ local function listed(preset, ctx)
 	return vim.tbl_contains(fts, ctx.filetype)
 end
 
--- Build the preset list for picker `name`: the defaults (unless disabled by
--- `config.default_presets`), then `config.presets[name]`, then `extra`.
+-- Whether built-in presets of `group` are enabled by `setting`, the value of
+-- `default_presets[picker]`: true/nil (all groups), false (none), a list of
+-- the groups to keep, or a map with `false` for the groups to drop.
+local function group_enabled(setting, group)
+	if setting == nil or setting == true then return true end
+	if setting == false then return false end
+	if vim.islist(setting) then return vim.tbl_contains(setting, group) end
+	return setting[group] ~= false
+end
+
+-- Build the preset list for picker `name`: the defaults of the groups enabled
+-- by `config.default_presets`, then `config.presets[name]`, then `extra`.
 -- A later preset with the same name replaces an earlier one in place, so
 -- `{ name = 'All files', disabled = true }` hides a default.
 function M.resolve(name, config, extra, ctx)
 	local list = {}
-	local use_defaults = config.default_presets
-	if type(use_defaults) == 'table' then use_defaults = use_defaults[name] ~= false end
-	local sources = {
-		use_defaults ~= false and M.defaults[name] or nil,
-		(config.presets or {})[name],
-		extra,
-	}
+	local setting = config.default_presets
+	if type(setting) == 'table' then setting = setting[name] end
+	local defaults = M.defaults[name]
+	if type(defaults) == 'function' then defaults = defaults(ctx) end
+	defaults = vim.tbl_filter(function(preset)
+		return group_enabled(setting, preset.group)
+	end, defaults or {})
+	local sources = { defaults, (config.presets or {})[name], extra }
 	local index = {}
 	for i = 1, 3 do
 		local source = sources[i]
@@ -205,7 +393,7 @@ function M.pick(list, active, picker_config, on_choice)
 				local is_active = preset.name == active or (preset == M.reset and not active)
 				local text = (is_active and '● ' or '  ') .. preset.name
 				if preset.desc then text = text .. '  — ' .. preset.desc end
-				return { value = preset, display = text, ordinal = preset.name .. ' ' .. (preset.desc or '') }
+				return { value = preset, display = text, ordinal = preset.name .. ' ' .. (preset.desc or '') .. ' ' .. (preset.group or '') }
 			end,
 		}),
 		sorter = conf.generic_sorter(opts),

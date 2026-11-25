@@ -28,13 +28,15 @@ M.filetype_langs = {
 }
 
 -- Resolve `opts.lang`: a string is used as is, `true` takes the filetype of
--- `opts.bufnr` (or the current buffer). Returns nil when no language applies.
+-- `opts.bufnr` (or the current buffer), or `opts.fallback_lang` when it has
+-- none. Returns nil when no language applies.
 function M.resolve_lang(opts)
 	local lang = opts.lang
 	if lang == true then
 		local bufnr = opts.bufnr or vim.api.nvim_get_current_buf()
 		lang = vim.bo[bufnr].filetype
 		lang = M.filetype_langs[lang] or lang
+		if lang == '' then lang = opts.fallback_lang end
 	end
 	if type(lang) ~= 'string' or lang == '' then return nil end
 	return lang
@@ -132,6 +134,9 @@ local js = {
 	},
 	types = { 'class_declaration' },
 	calls = { { 'call_expression', field = 'function' }, { 'new_expression', field = 'constructor' } },
+	imports = { 'import_statement' },
+	loops = { 'for_statement', 'for_in_statement', 'while_statement', 'do_statement' },
+	errors = { 'try_statement' },
 }
 local ts = vim.tbl_extend('force', js, {
 	types = { 'class_declaration', 'abstract_class_declaration', 'interface_declaration', 'type_alias_declaration', 'enum_declaration' },
@@ -147,9 +152,13 @@ local c = {
 		{ 'type_definition', field = 'declarator' },
 	},
 	calls = { { 'call_expression', field = 'function' } },
+	imports = { 'preproc_include' },
+	loops = { 'for_statement', 'while_statement', 'do_statement' },
 }
 local cpp = vim.tbl_extend('force', c, {
 	strings = { 'string_literal', 'raw_string_literal' },
+	loops = { 'for_statement', 'for_range_loop', 'while_statement', 'do_statement' },
+	errors = { 'try_statement' },
 	types = vim.list_extend({
 		{ 'class_specifier', has = { field = 'body', kind = 'field_declaration_list' } },
 		{ 'alias_declaration' },
@@ -161,6 +170,7 @@ M.languages = {
 		strings = { 'string', 'raw_string' },
 		functions = { 'function_definition' },
 		calls = { 'command' },
+		loops = { 'for_statement', 'c_style_for_statement', 'while_statement' },
 	},
 	c = c,
 	cpp = cpp,
@@ -170,6 +180,8 @@ M.languages = {
 		functions = { 'function_declaration', 'method_declaration' },
 		types = { 'type_spec' },
 		calls = { { 'call_expression', field = 'function' } },
+		imports = { 'import_spec' },
+		loops = { 'for_statement' },
 	},
 	java = {
 		comments = { 'line_comment', 'block_comment' },
@@ -177,6 +189,9 @@ M.languages = {
 		functions = { 'method_declaration', 'constructor_declaration' },
 		types = { 'class_declaration', 'interface_declaration', 'enum_declaration', 'record_declaration' },
 		calls = { 'method_invocation', { 'object_creation_expression', field = 'type' } },
+		imports = { 'import_declaration' },
+		loops = { 'for_statement', 'enhanced_for_statement', 'while_statement', 'do_statement' },
+		errors = { 'try_statement', 'try_with_resources_statement' },
 	},
 	javascript = js,
 	lua = {
@@ -184,6 +199,7 @@ M.languages = {
 		strings = { 'string' },
 		functions = { 'function_declaration' },
 		calls = { 'function_call' },
+		loops = { 'for_statement', 'while_statement', 'repeat_statement' },
 	},
 	python = {
 		comments = { 'comment' },
@@ -191,6 +207,9 @@ M.languages = {
 		functions = { 'function_definition' },
 		types = { 'class_definition' },
 		calls = { { 'call', field = 'function' } },
+		imports = { 'import_statement', 'import_from_statement' },
+		loops = { 'for_statement', 'while_statement' },
+		errors = { 'try_statement' },
 	},
 	rust = {
 		comments = { 'line_comment', 'block_comment' },
@@ -198,6 +217,8 @@ M.languages = {
 		functions = { 'function_item', 'function_signature_item' },
 		types = { 'struct_item', 'enum_item', 'union_item', 'trait_item', 'type_item' },
 		calls = { { 'call_expression', field = 'function' }, { 'macro_invocation', field = 'macro' } },
+		imports = { 'use_declaration', 'extern_crate_declaration' },
+		loops = { 'for_expression', 'while_expression', 'loop_expression' },
 	},
 	tsx = ts,
 	typescript = ts,
@@ -244,6 +265,21 @@ M.rules.strings = text_rule('strings')
 M.rules.functions = definition_rule('functions')
 M.rules.types = definition_rule('types')
 M.rules.calls = definition_rule('calls')
+M.rules.imports = text_rule('imports')
+M.rules.loops = text_rule('loops')
+M.rules.errors = text_rule('errors')
+
+-- A rule for fixed node kinds in any language; the prompt filters their text.
+function M.rules.kind(...)
+	local kinds = { ... }
+	return function(prompt)
+		local any = {}
+		for _, kind in ipairs(kinds) do
+			any[#any + 1] = { kind = kind, regex = prompt ~= '' and prompt or nil }
+		end
+		return #any == 1 and any[1] or { any = any }
+	end
+end
 
 -- ast-grep reports character columns; Telescope wants byte columns.
 local function byte_col(line, col)

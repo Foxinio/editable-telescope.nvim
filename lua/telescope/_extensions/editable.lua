@@ -16,7 +16,8 @@ local config = {
 	mappings = {
 		change_root = '<C-s>',
 		edit_args = '<C-a>',
-		presets = '<C-o>',
+		-- b for bookmarks: saved searches. Insert mode leaves CTRL-B unused.
+		presets = '<C-b>',
 	},
 	-- `false` drops all built-in presets, `{ ast_grep = false }` only some.
 	default_presets = true,
@@ -215,7 +216,9 @@ local function ast_grep(opts)
 	opts = opts or {}
 	-- Capture the buffer now: once the picker is open the prompt buffer is current.
 	local bufnr = vim.api.nvim_get_current_buf()
-	local function lang_of(o) return ast_grep_util.resolve_lang({ lang = o.lang, bufnr = bufnr }) end
+	local function lang_of(o)
+		return ast_grep_util.resolve_lang({ lang = o.lang, fallback_lang = o.fallback_lang, bufnr = bufnr })
+	end
 	editable_picker({
 		query_key = 'ast_grep',
 		picker_opts = opts,
