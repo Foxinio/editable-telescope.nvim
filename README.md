@@ -30,6 +30,7 @@ With lazy.nvim:
           mappings = {
             change_root = '<C-s>',
             edit_args = '<C-a>',
+            presets = '<C-b>',
           },
         },
       },
@@ -60,6 +61,8 @@ While a picker is open in insert or normal mode:
 - `<C-s>` changes the search root.
 - `<C-a>` edits `rg` arguments in `live_grep` and `ast-grep` arguments in
   `ast_grep`.
+- `<C-b>` opens a small window with [presets](#presets) (saved searches, think
+  *b*ookmarks) for the picker.
 
 The keys can be changed under `extensions.editable.mappings` in Telescope's
 setup, as shown in the installation example.
@@ -115,13 +118,141 @@ The command building and JSON parsing live in `require('editable-telescope.ast_g
 (`build`, `with_pattern`, `parse`, `entry_maker`, `resolve_lang`) for use in
 your own pickers.
 
+## Presets
+
+`<C-b>` opens a small dropdown listing presets for the current picker. Choosing
+one reopens the picker with it applied, keeping the prompt and root; `Default`
+removes it and cancelling (`<Esc>`, `<C-c>`, `q`) returns to the picker
+unchanged. The active preset is marked `●` and shown in the title as `{name}`.
+A preset replaces the edited flags, so `<C-a>` afterwards edits the preset's flags.
+
+The key is `<C-b>` as in *bookmarks*: presets are saved searches you jump
+to. Neither Telescope nor Neovim's insert mode uses `CTRL-B`, so it overrides
+nothing in the prompt.
+
+### Built-in presets
+
+Built-in presets are organised in groups, which `default_presets` enables or
+disables per picker. Typing a group name in the window also filters by it.
+
+| Picker       | Group        | Presets                                                                 |
+| ------------ | ------------ | ----------------------------------------------------------------------- |
+| `find_files` | `scope`      | all files (hidden and ignored), hidden files, ignored files             |
+| `live_grep`  | `modes`      | literal, whole word, case sensitive, multiline                          |
+| `live_grep`  | `scope`      | all files, same extension as the current file, exclude tests            |
+| `live_grep`  | `types`      | Lua, C/C++, Python, Rust, JS/TS, Go, Java, shell, build, config, docs  |
+| `ast_grep`   | `general`    | text in comments, TODO comments, text in strings, function definitions, type definitions, function calls, imports, loops, error handling |
+| `ast_grep`   | `match`      | relaxed, structure only, exact (`--strictness`), all languages, all files, exclude tests |
+| `ast_grep`   | `lua`        | require, setup calls, keymaps, autocommands, user commands, `vim.cmd`, notifications, scheduled callbacks, pcall, pairs/ipairs loops, methods, module tables, `vim.loop`, anonymous functions |
+| `ast_grep`   | `python`     | import, from import, print, `== None`, `!= None`, isinstance, self attributes, list comprehensions, lambdas, open, raise, assert, eval/exec, subprocess, decorators, with blocks, bare except |
+| `ast_grep`   | `rust`       | unwrap, expect, `?`, panics, debug output, unsafe, clone, trait impls, all impls, match, `Box::new`, Rc/Arc, `.await`, casts, derives, closures |
+| `ast_grep`   | `c`          | includes, macros, allocations, unsafe string functions, printf family, NULL checks, goto, sizeof, switch, static functions, casts (C and C++ buffers) |
+| `ast_grep`   | `cpp`        | new, delete, smart pointers, `std::move`, C++ casts, lambdas, range for, auto declarations, `using namespace`, templates, `std::cout`, classes |
+| `ast_grep`   | `go`         | error checks, error assignments, goroutines, defer, panic, fmt output, make, channel sends/receives, select, type assertions, context roots, closures |
+| `ast_grep`   | `javascript` | console, await, import from, require, exports, arrow functions, promise then, fetch, JSON, timers, event listeners, loose equality, React hooks, template literals, debugger (JS and TS buffers) |
+| `ast_grep`   | `typescript` | `as any`, any annotations, non-null assertions, ts-ignore, interfaces, type aliases, enums, satisfies, decorators |
+| `ast_grep`   | `java`       | System.out, printStackTrace, new, throw, catch blocks, equals, annotations, Optional, streams, lambdas, synchronized |
+| `ast_grep`   | `bash`       | eval, rm, sudo, downloads, source, echo/printf, command substitution, tests, pipelines, heredocs, exports, assignments |
+
+How the ast-grep presets work:
+
+- `general` searches use the buffer's language. The prompt is a regex matched
+  against the comment, string, import, loop or try-block text, or against the
+  name for definitions and calls. An empty prompt lists every match, for example
+  every comment in the project. They support Lua, Python, Rust, C, C++, Go, JS,
+  TS/TSX, Java and Bash (`require('editable-telescope.ast_grep').languages`;
+  imports, loops and error handling only where the language has them).
+- Language presets put a pattern (or a regex, for the ones built on rules) in
+  the prompt, ready to edit. Only the groups for the buffer's filetype are
+  listed, or all enabled groups in a buffer without one; they search in the
+  buffer's language, or the group's language when there is no filetype.
+- `tests/fixtures/ast_grep` holds a sample file per language, and the tests
+  check that every built-in preset finds something in it.
+
+### Configuration
+
+```lua
+editable = {
+  default_presets = {
+    -- Only these ast-grep groups: general searches, match modes, Lua and C/C++.
+    ast_grep = { 'general', 'match', 'lua', 'c', 'cpp' },
+    -- Or drop some: ast_grep = { java = false, bash = false },
+    live_grep = { types = false },
+    find_files = true, -- all groups (the default); false for none
+  },
+  -- default_presets = false turns off every built-in preset.
+  presets = {
+    live_grep = {
+      { name = 'Verilog', cmd_args = { '--glob', '*.{v,sv,svh}' } },
+      { name = 'TODOs', prompt = 'TODO|FIXME', cmd_args = '--glob !vendor/**' },
+      { name = 'Literal', disabled = true }, -- hide a built-in preset
+    },
+    ast_grep = {
+      {
+        name = 'Lua: Telescope extensions',
+        ft = 'lua',
+        prompt = "require('telescope').load_extension($NAME)",
+        opts = { lang = 'lua' },
+      },
+      {
+        name = 'Lua: callbacks',
+        desc = 'functions passed as arguments',
+        ft = 'lua',
+        opts = {
+          lang = 'lua',
+          rule = function() return { kind = 'function_definition', inside = { kind = 'arguments' } } end,
+        },
+      },
+    },
+  },
+  -- Options for the preset window; theme is 'dropdown' (default), 'ivy', 'cursor' or false.
+  presets_picker = { theme = 'dropdown', winblend = 10 },
+}
+```
+
+Group settings apply to built-in presets only; your own presets are always
+listed (subject to `ft` and `disabled`).
+`require('editable-telescope.presets').language_groups()` returns the ast-grep
+language group names.
+
+Preset fields:
+
+| Field      | Meaning                                                                        |
+| ---------- | ------------------------------------------------------------------------------ |
+| `name`     | Shown in the window and title; a preset with a built-in name replaces it.      |
+| `desc`     | Optional description.                                                          |
+| `ft`       | Filetype or list; list the preset only in buffers of those filetypes.          |
+| `cmd_args` | Flags as a list, a string (parsed like `<C-a>` input) or `function(ctx)` (`ctx.bufnr`, `ctx.filetype`, `ctx.filename`). |
+| `opts`     | Picker options, e.g. `hidden`, `no_ignore`, `lang`, `globs`, `rule`.           |
+| `prompt`   | Replaces the prompt.                                                           |
+| `cwd`      | Search root.                                                                   |
+| `group`    | Optional label; typing it in the window filters by it.                         |
+| `disabled` | Hide the preset.                                                               |
+
+A single call can add presets too: `ast_grep({ presets = { ... } })`.
+
+`ast_grep` also accepts `rule = function(prompt, lang)` directly. It returns an
+[ast-grep rule](https://ast-grep.github.io/reference/rule.html) as a Lua table
+(or nil when the language is not supported) and switches the picker to
+`ast-grep scan --inline-rules`. The language is `lang` or a `-l` in the edited
+flags. The rules behind the general presets are
+`require('editable-telescope.ast_grep').rules` (`comments`, `strings`,
+`functions`, `types`, `calls`, `imports`, `loops`, `errors`), and
+`rules.kind('kind', ...)` matches given node kinds, filtered by the prompt.
+`lang = true` with `fallback_lang = 'lua'` uses the buffer's language, or Lua
+in a buffer without a filetype.
+
 ## Shared picker API
 
 Other extensions can call `telescope.extensions.editable.editable_picker(opts)`.
 Supply `picker_opts`, `prompt_title(state)`, and `open(state, picker_opts)` to
 create a picker. Optional `initial_state` supplies `cwd` and `cmd_args`;
-`mappings` overrides `change_root` and `edit_args` for this picker only
-(`edit_grep_args` is still accepted as an alias).
+`mappings` overrides `change_root`, `edit_args` and `presets` for this picker only
+(`edit_grep_args` is still accepted as an alias). `presets` (a list, or
+`function(ctx)` returning one) enables the preset window; a preset's `opts` are
+merged into `picker_opts` before `open` is called, and `state.preset` holds its
+name. After a preset is applied `state.cmd_args_text` is nil, so
+`format_cmd_args` should fall back to `args`.
 The wrapper preserves the prompt when editing settings and invokes `open` again.
 Pass the supplied `picker_opts.attach_mappings` through to the picker so the
 editing controls remain installed.
